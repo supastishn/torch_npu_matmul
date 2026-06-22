@@ -1,0 +1,20 @@
+# ninja log v7
+0	36338	1782116084176969295	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+913	36884	1782116640856969083	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+955	46537	1782117041272968930	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+1108	46840	1782117605524968715	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+1250	60710	1782118644088968319	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+812	50147	1782119602396967953	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+920	55714	1782119882788967846	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+892	50758	1782120723280967525	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+1519	70242	1782121382092967274	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+1409	65576	1782121811800967110	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+1084	40536	1782125881743814968	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+809	38710	1782126154967814864	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+1078	40609	1782126359115814786	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
+1044	37503	1782126811779814614	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	574bf38b3243d8a2
+926	38290	1782127304759814426	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	574bf38b3243d8a2
+1196	71751	1782128051615814141	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	574bf38b3243d8a2
+1284	52250	1782128267191814058	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	574bf38b3243d8a2
+910	45971	1782131138552400098	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	574bf38b3243d8a2
+2009	51947	1782132148700399712	/data/data/com.termux/files/home/projects/pytorch_npublas/build/temp.android-24-arm64_v8a-cpython-313/npublas.o	7d2b54c04d6a5b14
