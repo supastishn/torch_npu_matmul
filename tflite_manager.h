@@ -12,6 +12,7 @@
 #include <cstring>
 #include <chrono>
 #include "fixedpoint.h"
+#include "utils/execution.h"
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/model_builder.h"
 #include "tensorflow/lite/kernels/register.h"
@@ -103,7 +104,7 @@ struct Model {
         }
     }
 };
-inline std::vector<Model> models;
+inline std::vector<Model>* models = new std::vector<Model>();
 inline void request_tflite_generation(int M, int K, int N, int backend_choice) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) return;
@@ -115,7 +116,7 @@ inline void request_tflite_generation(int M, int K, int N, int backend_choice) {
         return;
     }
     struct timeval tv;
-    tv.tv_sec = 2;
+    tv.tv_sec = 15;
     tv.tv_usec = 0;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
@@ -221,17 +222,86 @@ inline Model create_model(int M, int K, int N, int backend_choice) {
     return model_res;
 }
 inline Model& fetch_model(int M, int K, int N, int backend_choice) {
-    for (size_t i = 0; i < models.size(); ++i) {
-        if (models[i].M == M && models[i].K == K && models[i].N == N && models[i].backend_choice == backend_choice) {
-            return models[i];
+    for (size_t i = 0; i < models->size(); ++i) {
+        if ((*models)[i].M == M && (*models)[i].K == K && (*models)[i].N == N && (*models)[i].backend_choice == backend_choice) {
+            return (*models)[i];
         }
     }
-    models.push_back(create_model(M, K, N, backend_choice));
-    return models.back();
+    models->push_back(create_model(M, K, N, backend_choice));
+    return models->back();
 }
 inline void matmul_int8(const float* A, const float* B, float* C, int M, int K, int N, bool transposeA, bool transposeB, int backend_choice = 1) {
     bool do_prof = std::getenv("PROF_NPU") != nullptr;
     auto t0 = std::chrono::high_resolution_clock::now();
+
+    auto& engine = QnnHtaExecutionEngine::getInstance();
+    engine.loadBackend(backend_choice);
+    if (engine.isLoaded()) {
+        QnnCachedGraph& graph = engine.getOrCreateGraph(M, K, N);
+        if (!graph.isValid) {
+            return;
+        }
+        
+        FixedPointBlock<int8_t> fixed_A(M, K, K, true);
+        fixed_A.fit_exponent(A);
+        fixed_A.floats_to_mantissa(A, 0, 8);
+        
+        FixedPointBlock<int8_t> fixed_B(N, K, K, true);
+        float* slice_B = new float[N * K];
+        for (int r = 0; r < N; ++r) {
+            for (int c = 0; c < K; ++c) {
+                slice_B[r * K + c] = B[c * N + r];
+            }
+        }
+        fixed_B.fit_exponent(slice_B);
+        fixed_B.floats_to_mantissa(slice_B, 0, 8);
+        delete[] slice_B;
+        
+        uint8_t* u_A = (uint8_t*)Scratchpad::alloc(M * K);
+        uint8_t* u_B = (uint8_t*)Scratchpad::alloc(N * K);
+        for (int i = 0; i < M * K; ++i) {
+            u_A[i] = (uint8_t)(fixed_A.mantissa[i] + 127);
+        }
+        for (int i = 0; i < N * K; ++i) {
+            u_B[i] = (uint8_t)(fixed_B.mantissa[i] + 127);
+        }
+        uint8_t* out_buf = (uint8_t*)Scratchpad::alloc(M * N * 2);
+        
+        auto t1 = std::chrono::high_resolution_clock::now();
+        engine.execute(graph, u_A, u_B, out_buf);
+        auto t2 = std::chrono::high_resolution_clock::now();
+        
+        Scratchpad::free(u_A);
+        Scratchpad::free(u_B);
+
+        #pragma omp parallel for if(M*N > 10000)
+        for (int i = 0; i < M; ++i) {
+            float mean_a = fixed_A.means[i];
+            int32_t exp_a = fixed_A.exponents[i];
+            int32_t prec_a = fixed_A.precisions[i];
+            #pragma clang loop vectorize(enable)
+            for (int j = 0; j < N; ++j) {
+                int32_t total_exp = exp_a + fixed_B.exponents[j];
+                int32_t total_prec = prec_a + fixed_B.precisions[j];
+                float scale = fast_pow2(total_exp - total_prec);
+                uint16_t raw_val_u16 = ((uint16_t*)out_buf)[i * N + j];
+                float raw_val = (float)(static_cast<int32_t>(raw_val_u16) - 32768);
+                float dequantized = raw_val * scale;
+                float correction = (float)K * mean_a * fixed_B.means[j];
+                C[i * N + j] = dequantized + correction;
+            }
+        }
+        Scratchpad::free(out_buf);
+        auto t3 = std::chrono::high_resolution_clock::now();
+        if (do_prof) {
+            auto dur_pre = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            auto dur_dsp = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+            auto dur_post = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
+            std::cerr << "[PROF RAW QNN DIRECT] Pre-proc: " << dur_pre << " us, QNN Run: " << dur_dsp << " us, Post-proc: " << dur_post << " us" << std::endl;
+        }
+        return;
+    }
+
     Model& model_raw = fetch_model(M, K, N, backend_choice);
     tflite::Interpreter* interpreter = model_raw.interpreter.get();
     if (!interpreter) {
@@ -328,7 +398,7 @@ inline void matmul_int8(const float* A, const float* B, float* C, int M, int K, 
         auto dur_pre = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
         auto dur_dsp = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
         auto dur_post = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
-        std::cerr << "[PROF] Pre-proc: " << dur_pre << " us, CDSP Run: " << dur_dsp << " us, Post-proc: " << dur_post << " us" << std::endl;
+        std::cerr << "[DEPRECATED TFLITE FALLBACK PROF] Pre-proc: " << dur_pre << " us, CDSP Run: " << dur_dsp << " us, Post-proc: " << dur_post << " us" << std::endl;
     }
 }
 #endif

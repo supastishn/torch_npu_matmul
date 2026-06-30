@@ -9,10 +9,10 @@ library_dirs = [
     os.path.join(project_dir, "libs"),
 ]
 extra_compile_args = ["-O3", "-fopenmp", "-std=c++17"]
-extra_link_args = ["-fopenmp", "-Wl,-rpath," + os.path.join(project_dir, "libs")]
+extra_link_args = ["-fopenmp", "-Wl,-rpath," + os.path.join(project_dir, "libs"), "-Wl,--disable-new-dtags"]
 if os.environ.get("USE_ASAN") == "1":
     extra_compile_args = ["-O0", "-g", "-fsanitize=address", "-fno-omit-frame-pointer", "-fopenmp", "-std=c++17"]
-    extra_link_args = ["-fsanitize=address", "-fopenmp", "-Wl,-rpath," + os.path.join(project_dir, "libs")]
+    extra_link_args = ["-fsanitize=address", "-fopenmp", "-Wl,-rpath," + os.path.join(project_dir, "libs"), "-Wl,--disable-new-dtags"]
 setup(
     name="pytorch_npublas",
     ext_modules=[

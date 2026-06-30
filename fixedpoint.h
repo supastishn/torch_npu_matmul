@@ -1,5 +1,6 @@
 #ifndef QQ_FIXEDPOINT_H
 #define QQ_FIXEDPOINT_H
+#include "utils/execution.h"
 #include <cstdint>
 #include <cstring>
 #include <mutex>
@@ -93,10 +94,21 @@ private:
     inline static std::mutex scratchpad_mutex;
     static void initialize_if_needed() {
         if (!memory_buffer) {
-            void* raw_mem = nullptr;
-            int res = posix_memalign(&raw_mem, 128, total_size);
-            if (res == 0) {
-                memory_buffer = (uint8_t*)raw_mem;
+            load_rpcmem_once();
+            if (rpcmem_loaded) {
+                void* raw_mem = global_rpcmem_alloc(25, 0, total_size);
+                if (raw_mem) {
+                    memory_buffer = (uint8_t*)raw_mem;
+                }
+            }
+            if (!memory_buffer) {
+                void* raw_mem = nullptr;
+                int res = posix_memalign(&raw_mem, 128, total_size);
+                if (res == 0) {
+                    memory_buffer = (uint8_t*)raw_mem;
+                }
+            }
+            if (memory_buffer) {
                 head_block = (BlockHeader*)memory_buffer;
                 head_block->size = total_size - sizeof(BlockHeader);
                 head_block->is_free = true;
@@ -109,11 +121,25 @@ public:
     static void set_size(size_t new_size) {
         std::lock_guard<std::mutex> lock(scratchpad_mutex);
         if (memory_buffer) {
-            ::free(memory_buffer);
+            load_rpcmem_once();
+            if (rpcmem_loaded) {
+                global_rpcmem_free(memory_buffer);
+            } else {
+                ::free(memory_buffer);
+            }
             memory_buffer = nullptr;
             head_block = nullptr;
         }
         total_size = new_size;
+    }
+    static int get_fd_and_offset(void* ptr, uint32_t& offset) {
+        load_rpcmem_once();
+        if (rpcmem_loaded && memory_buffer && ptr >= memory_buffer && ptr < memory_buffer + total_size) {
+            offset = (uint32_t)((uint8_t*)ptr - memory_buffer);
+            return global_rpcmem_to_fd(memory_buffer);
+        }
+        offset = 0;
+        return -1;
     }
     static void* alloc(size_t size) {
         std::lock_guard<std::mutex> lock(scratchpad_mutex);
@@ -337,9 +363,11 @@ struct FixedPointBlock {
                     }
                     precisions[block_flat_idx] = bits_of_precision;
                     float exponent_scale = fast_pow2(-exponent_val);
+                    const float* __restrict__ source_ptr = floats_array + row_index * cols + start_col;
+                    float* __restrict__ dest_ptr = temporary_buffer;
                     #pragma clang loop vectorize(enable)
                     for (int col_index = 0; col_index < count; ++col_index) {
-                        temporary_buffer[col_index] = floats_array[row_index * cols + start_col + col_index] * exponent_scale;
+                        dest_ptr[col_index] = source_ptr[col_index] * exponent_scale;
                     }
                     stochastic_round_array(temporary_buffer, &mantissa[row_index * cols + start_col], count, bits_of_precision);
                     float integer_mean_float = means[block_flat_idx] * fast_pow2(-exponent_val + bits_of_precision);
@@ -381,9 +409,10 @@ struct FixedPointBlock {
                     }
                     precisions[block_flat_idx] = bits_of_precision;
                     float exponent_scale = fast_pow2(-exponent_val);
-                    #pragma clang loop vectorize(enable)
+                    const float* __restrict__ source_ptr = floats_array + start_row * cols + col_index;
+                    float* __restrict__ dest_ptr = temporary_buffer;
                     for (int row_index = 0; row_index < count; ++row_index) {
-                        temporary_buffer[row_index] = floats_array[(start_row + row_index) * cols + col_index] * exponent_scale;
+                        dest_ptr[row_index] = source_ptr[row_index * cols] * exponent_scale;
                     }
                     T* column_mantissa = new T[count];
                     stochastic_round_array(temporary_buffer, column_mantissa, count, bits_of_precision);
